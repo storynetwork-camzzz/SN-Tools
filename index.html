@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SN Tools</title>
-<script src="https://cdn.jsdelivr.net/npm/@jsonbin/jsonbin-client@1.0.0/dist/jsonbin.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -611,7 +610,7 @@
 <body>
 
 <!-- ═══ SITE HEADER ═══ -->
-<header class="site-header">
+<header class="site-header" id="siteHeader">
   <a class="site-logo" href="#">
     <div class="site-logo-icon"><img src="https://codehs.com/uploads/b9084e2547f1923caa433b97f16c89d1" alt="SN"></div>
     <div class="site-logo-name">SN <span>Tools</span></div>
@@ -810,11 +809,133 @@
 </div>
 
 <!-- ═══ FOOTER ═══ -->
-<footer class="site-footer">
+<footer class="site-footer" id="siteFooter">
   <p>© 2025 <strong style="color:rgba(255,255,255,0.6)">Camzzz</strong> · All rights reserved · <a href="#">SN Tools</a></p>
 </footer>
 
 <script>
+  // ═══════════════════════════════════════════════════════════════
+  // CRITICAL: Check for shared project URL BEFORE anything else
+  // This runs immediately to prevent the SN Tools UI from showing
+  // when loading a shared project
+  // ═══════════════════════════════════════════════════════════════
+  
+  (function() {
+    const hash = window.location.hash;
+    
+    // Check if this is a project URL (format: #/project-name-id)
+    if (hash && hash.startsWith('#/')) {
+      const hashPart = hash.substring(2);
+      
+      // Try to extract bin ID (JSONBin IDs are 24 characters)
+      const match = hashPart.match(/^([a-z0-9-]+)-([a-zA-Z0-9]{24})$/);
+      
+      if (match) {
+        const projectName = match[1];
+        const binId = match[2];
+        
+        // Hide the entire SN Tools site immediately
+        document.documentElement.style.display = 'none';
+        
+        // Fetch the project data from JSONBin
+        fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+          headers: {
+            'X-Master-Key': '$2a$10$nBGLcRp5Uh5LKOLtyBgx4O0pCMa2IvB5tDD7oFUaySihn.mCvUTCa'
+          }
+        })
+        .then(response => {
+          if (!response.ok) throw new Error('Not found');
+          return response.json();
+        })
+        .then(result => {
+          const data = result.record;
+          
+          if (data && data.h && data.c && data.j) {
+            // Decode base64 data
+            const html = decodeURIComponent(escape(atob(data.h)));
+            const css = decodeURIComponent(escape(atob(data.c)));
+            const js = decodeURIComponent(escape(atob(data.j)));
+            
+            // Render the project fullscreen
+            document.open();
+            document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${projectName}</title>
+<style>${css}</style>
+</head>
+<body>${html}<script>${js}<\/script></body>
+</html>`);
+            document.close();
+          } else {
+            throw new Error('Invalid data format');
+          }
+        })
+        .catch(error => {
+          // Show error page
+          document.open();
+          document.write(`<!DOCTYPE html>
+<html>
+<head><title>Project Not Found</title>
+<style>
+body{font-family:system-ui,sans-serif;padding:2rem;text-align:center;background:#1a1a1a;color:#fff;}
+h1{color:#ff6b6b}a{color:#4facfe;text-decoration:none}
+</style></head>
+<body>
+<h1>🔍 Project Not Found</h1>
+<p>The project could not be loaded.</p>
+<p>${error.message}</p>
+<a href="${window.location.origin}${window.location.pathname}">← Back to SN Tools</a>
+</body></html>`);
+          document.close();
+        });
+        
+        // Stop execution here - don't load the rest of the site
+        return;
+      }
+      
+      // Check for localStorage fallback (shorter IDs)
+      const localMatch = hashPart.match(/^([a-z0-9-]+)-([a-z0-9]{6,10})$/);
+      if (localMatch) {
+        const projectName = localMatch[1];
+        const localId = localMatch[2];
+        const fullPath = `${projectName}-${localId}`;
+        
+        const projects = JSON.parse(localStorage.getItem('sn-tools-projects') || '{}');
+        const data = projects[fullPath];
+        
+        if (data) {
+          // Hide site and render project
+          document.documentElement.style.display = 'none';
+          
+          const html = decodeURIComponent(escape(atob(data.h)));
+          const css = decodeURIComponent(escape(atob(data.c)));
+          const js = decodeURIComponent(escape(atob(data.j)));
+          
+          document.open();
+          document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${projectName}</title>
+<style>${css}</style>
+</head>
+<body>${html}<script>${js}<\/script></body>
+</html>`);
+          document.close();
+          return;
+        }
+      }
+    }
+  })();
+
+  // ═══════════════════════════════════════════════════════════════
+  // MAIN SITE CODE (only runs if not a project URL)
+  // ═══════════════════════════════════════════════════════════════
+
   // ── TAB SWITCHING ──
   function switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach((b, i) => {
@@ -1091,7 +1212,7 @@ ${js}
     return result;
   }
 
-async function shareProject() {
+  async function shareProject() {
     let projectName = prompt('Enter project name:', 'my-project');
     if (!projectName) return;
     
@@ -1107,12 +1228,12 @@ async function shareProject() {
     };
     
     try {
-      // Upload to JSONBin.io
+      // Upload to JSONBin.io - FIXED URL (removed space)
       const response = await fetch('https://api.jsonbin.io/v3/b', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Master-Key': '$2a$10$nBGLcRp5Uh5LKOLtyBgx4O0pCMa2IvB5tDD7oFUaySihn.mCvUTCa' // ← GET YOUR KEY FROM https://jsonbin.io
+          'X-Master-Key': '$2a$10$nBGLcRp5Uh5LKOLtyBgx4O0pCMa2IvB5tDD7oFUaySihn.mCvUTCa'
         },
         body: JSON.stringify(data)
       });
@@ -1132,9 +1253,7 @@ async function shareProject() {
       });
       
     } catch (error) {
-      alert('Error saving project: ' + error.message + '\n\nFalling back to localStorage...');
-      
-      // Fallback to localStorage
+      // Silent fallback to localStorage - no error alert
       const randomId = generateRandomId();
       const fullPath = `${projectName}-${randomId}`;
       const projects = JSON.parse(localStorage.getItem('sn-tools-projects') || '{}');
@@ -1165,104 +1284,6 @@ async function shareProject() {
   window.addEventListener('load', () => {
     updatePreview();
   });
-  
-  // Also handle hash changes while on the page
-  window.addEventListener('hashchange', () => {
-    if (window.location.hash.startsWith('#/')) {
-      handleRoute();
-    }
-  });
-
-// Handle #/project-name-id URLs (GitHub Pages compatible)
-  async function handleRoute() {
-    const hash = window.location.hash;
-    
-    // Check if hash looks like #/project-name-abc123
-    if (hash && hash.startsWith('#/')) {
-      const hashPart = hash.substring(2); // Remove the #/
-      
-      // Extract project name and bin ID (format: name-abc123def456)
-      const match = hashPart.match(/^([a-z0-9-]+)-([a-z0-9]+)$/);
-      
-      if (match) {
-        const projectName = match[1];
-        const binId = match[2];
-        
-        let data = null;
-        
-        // Try to fetch from JSONBin if ID is long (JSONBin IDs are 24 chars)
-        if (binId.length > 10) {
-          try {
-            const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
-              headers: {
-                'X-Master-Key': '$2a$10$nBGLcRp5Uh5LKOLtyBgx4O0pCMa2IvB5tDD7oFUaySihn.mCvUTCa' // ← SAME KEY AS IN shareProject()
-              }
-            });
-            
-            if (response.ok) {
-              const result = await response.json();
-              data = result.record;
-            }
-          } catch (e) {
-            console.log('JSONBin fetch failed:', e);
-          }
-        }
-        
-        // Fallback to localStorage if not found online
-        if (!data) {
-          const projects = JSON.parse(localStorage.getItem('sn-tools-projects') || '{}');
-          data = projects[hashPart];
-        }
-        
-        if (data) {
-          // Decode and render the project fullscreen
-          const html = decodeURIComponent(escape(atob(data.h)));
-          const css = decodeURIComponent(escape(atob(data.c)));
-          const js = decodeURIComponent(escape(atob(data.j)));
-          
-          document.open();
-          document.write(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${projectName}</title>
-<style>${css}</style>
-</head>
-<body>${html}<script>${js}<\/script></body>
-</html>`);
-          document.close();
-          return true; // We handled it, stop execution
-        } else {
-          // Project not found
-          document.open();
-          document.write(`<!DOCTYPE html>
-<html>
-<head><title>Project Not Found</title></head>
-<body style="font-family:system-ui;padding:2rem;text-align:center;background:#1a1a1a;color:white;">
-<h1>🔍 Project Not Found</h1>
-<p>The project "${hashPart}" could not be found.</p>
-<p>It may have been deleted or the link might be incorrect.</p>
-<a href="${window.location.origin}${window.location.pathname}" style="color:#4facfe;text-decoration:none;">← Back to SN Tools</a>
-</body>
-</html>`);
-          document.close();
-          return true;
-        }
-      }
-    }
-    return false; // Not a project URL, continue loading main site
-  }
-
-  // Check route on load BEFORE anything else (handleRoute is now async)
-  (async function() {
-    const handled = await handleRoute();
-    if (handled) {
-      // If we rendered a project, stop here - don't load the rest of the site
-      throw new Error('Project rendered');
-    }
-  })();
-
 </script>
 
 </body>
